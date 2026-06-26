@@ -6,11 +6,13 @@ defmodule Polymarket.Supervisor do
 
   alias Polymarket.SocketSupervisor
 
+  @doc false
   @spec start_link() :: Supervisor.on_start()
   def start_link do
     Supervisor.start_link(__MODULE__, [], name: __MODULE__)
   end
 
+  @doc false
   @impl true
   def init(_init_arg) do
     children = [

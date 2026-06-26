@@ -36,6 +36,7 @@ defmodule Polymarket.WebSocket do
   #                                API                                         #
   # ---------------------------------------------------------------------------#
 
+  @doc false
   @spec start_link(term()) :: {:ok, pid()} | {:error, term()}
   def start_link(_opts) do
     with {:ok, socket} <- GenServer.start_link(__MODULE__, []),
@@ -53,6 +54,9 @@ defmodule Polymarket.WebSocket do
     end
   end
 
+  @doc """
+  Sends a string as a message over the websocket.
+  """
   @spec send_message(pid(), String.t()) :: :ok
   def send_message(pid, text) do
     GenServer.call(pid, {:send_text, text})
@@ -146,6 +150,7 @@ defmodule Polymarket.WebSocket do
   # ---------------------------------------------------------------------------
   # Handle Response
 
+  @spec handle_responses(t(), [Mint.Types.response()]) :: t()
   defp handle_responses(state, responses)
 
   defp handle_responses(%{request_ref: ref} = state, [{:status, ref, status} | rest]) do
@@ -204,6 +209,8 @@ defmodule Polymarket.WebSocket do
   # ---------------------------------------------------------------------------
   # Send Frame
 
+  @spec send_frame(t(), Mint.WebSocket.frame() | Mint.WebSocket.shorthand_frame()) ::
+          {:ok, t()} | {:error, t(), term()}
   defp send_frame(state, frame) do
     case Mint.WebSocket.encode(state.websocket, frame) do
       {:ok, websocket, data} ->
@@ -222,6 +229,7 @@ defmodule Polymarket.WebSocket do
   # ---------------------------------------------------------------------------
   # Receive Frame
 
+  @spec handle_frames(t(), [Mint.WebSocket.frame()]) :: t()
   defp handle_frames(state, frames) do
     Enum.reduce(frames, state, fn
       # reply to pings with pongs
@@ -239,19 +247,7 @@ defmodule Polymarket.WebSocket do
         put_in(state.last_pong, DateTime.utc_now())
 
       {:text, text}, state ->
-        log_message(text)
-        # try and decode the message to json.
-        case decode_message(text) do
-          {:ok, message} ->
-            Logger.debug("Received: #{inspect(message)}")
-
-            MessageHandler.handle_message(message, state)
-            |> process_result()
-
-          {:error, err} ->
-            Logger.warning("failed to decode message #{text} #{inspect(err)}")
-            state
-        end
+        handle_text(text, state)
 
       frame, state ->
         Logger.debug("Unexpected frame received: #{inspect(frame)}")
@@ -259,9 +255,33 @@ defmodule Polymarket.WebSocket do
     end)
   end
 
+  @spec handle_text(String.t(), t()) :: t()
+  defp handle_text(text, state) do
+    # try and decode the message to json. the message can be a list of
+    # events, so deal with those too.
+    case decode_message(text) do
+      {:ok, messages} ->
+        Logger.debug("Received: #{inspect(messages)}")
+
+        messages
+        # Can be a single or a list of messages, so always turn it into a list.
+        |> List.wrap()
+        |> Enum.reduce(state, fn message, state ->
+          MessageHandler.handle_message(message, state)
+          |> process_result()
+        end)
+
+      {:error, err} ->
+        log_message(text)
+        Logger.warning("failed to decode message #{text} #{inspect(err)}")
+        state
+    end
+  end
+
   # ---------------------------------------------------------------------------
   # Closing
 
+  @spec do_close(t()) :: {:stop, :normal, t()}
   defp do_close(state) do
     Logger.debug("Closing websocket #{inspect(state)}")
     # Streaming a close frame may fail if the server has already closed
@@ -274,6 +294,7 @@ defmodule Polymarket.WebSocket do
   # ---------------------------------------------------------------------------
   # Reply
 
+  @spec reply(t(), term()) :: t()
   defp reply(state, response) do
     if state.caller, do: GenServer.reply(state.caller, response)
     put_in(state.caller, nil)
@@ -281,6 +302,11 @@ defmodule Polymarket.WebSocket do
 
   # ---------------------------------------------------------------------------
   # Decoding
+
+  @spec decode_message(String.t()) :: {:ok, term()} | {:error, Jason.DecodeError.t()}
+  defp decode_message(messages) when is_list(messages) do
+    Enum.map(messages, &decode_message/1)
+  end
 
   defp decode_message(message) do
     message
@@ -291,6 +317,7 @@ defmodule Polymarket.WebSocket do
   # Logging for debugging
 
   @logfile "test/fixtures/polymarket_websocket_responses.txt"
+  @spec log_message(String.t()) :: :ok
   defp log_message(text) do
     File.write!(@logfile, text <> "\n", [:append])
   end
@@ -298,6 +325,7 @@ defmodule Polymarket.WebSocket do
   # ---------------------------------------------------------------------------
   # Process response from handler
 
+  @spec process_result({:reply, {:text, String.t()}, t()} | {:noreply, t()}) :: t()
   defp process_result({:reply, frame, state}) do
     {:ok, state} = send_frame(state, frame)
     state

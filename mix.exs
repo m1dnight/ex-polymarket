@@ -54,6 +54,7 @@ defmodule Polymarket.MixProject do
       {:mint, "~> 1.9"},
       {:typedstruct, "~> 0.5.4"},
       {:jason, "~> 1.4"},
+      {:typed_ecto_schema, "~> 0.4.3"},
       {:quokka, "~> 2.13", only: [:dev, :test], runtime: false},
       {:credo, "~> 1.7", only: [:dev, :test], runtime: false},
       {:dialyxir, "~> 1.4", only: [:dev, :test], runtime: false},
