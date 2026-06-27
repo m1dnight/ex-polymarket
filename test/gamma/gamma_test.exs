@@ -18,6 +18,13 @@ defmodule Polymarket.GammaTest do
   @market_id @market_attrs["id"]
   @market_slug @market_attrs["slug"]
 
+  # First line of the tags fixture: a JSON array of (camelCase, string-keyed) tags.
+  @tags_attrs "test/fixtures/gamma/tags.txt"
+              |> File.read!()
+              |> String.split("\n", trim: true)
+              |> hd()
+              |> Jason.decode!()
+
   describe "get_market_by_id/1" do
     test "requests the right URL and parses the market on a 200 response" do
       Req.Test.stub(Polymarket.Gamma, fn conn ->
@@ -131,6 +138,51 @@ defmodule Polymarket.GammaTest do
       end)
 
       assert {:error, :get_market_failed} = Gamma.get_market_by_slug(@market_slug)
+    end
+  end
+
+  describe "get_market_tags/1" do
+    test "requests the right URL and parses the tags on a 200 response" do
+      Req.Test.stub(Polymarket.Gamma, fn conn ->
+        assert conn.method == "GET"
+        assert conn.request_path == "/markets/#{@market_id}/tags"
+        Req.Test.json(conn, @tags_attrs)
+      end)
+
+      assert {:ok, tags} = Gamma.get_market_tags(@market_id)
+      assert [%Tag{} | _] = tags
+      assert length(tags) == length(@tags_attrs)
+
+      first = hd(tags)
+      expected = hd(@tags_attrs)
+      assert first.id == expected["id"]
+      assert first.slug == expected["slug"]
+      assert %DateTime{} = first.created_at
+    end
+
+    test "accepts an integer id" do
+      Req.Test.stub(Polymarket.Gamma, fn conn ->
+        assert conn.request_path == "/markets/#{@market_id}/tags"
+        Req.Test.json(conn, @tags_attrs)
+      end)
+
+      assert {:ok, [%Tag{} | _]} = Gamma.get_market_tags(String.to_integer(@market_id))
+    end
+
+    test "returns an error on a non-200 response" do
+      Req.Test.stub(Polymarket.Gamma, fn conn ->
+        Plug.Conn.send_resp(conn, 404, "Not Found")
+      end)
+
+      assert {:error, :get_market_tags_failed} = Gamma.get_market_tags("does-not-exist")
+    end
+
+    test "returns an error when a tag in the payload is invalid" do
+      Req.Test.stub(Polymarket.Gamma, fn conn ->
+        Req.Test.json(conn, [%{"createdBy" => "not-an-integer"}])
+      end)
+
+      assert {:error, :get_market_tags_failed} = Gamma.get_market_tags(@market_id)
     end
   end
 end

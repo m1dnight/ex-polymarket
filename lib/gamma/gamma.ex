@@ -4,6 +4,7 @@ defmodule Polymarket.Gamma do
   """
 
   alias Polymarket.Schemas.Market
+  alias Polymarket.Schemas.Tag
 
   @url "https://gamma-api.polymarket.com"
 
@@ -69,9 +70,46 @@ defmodule Polymarket.Gamma do
     end
   end
 
+  @doc """
+  Retrieves the tags attached to a market by the market's unique ID.
+
+  Returns the list of `Polymarket.Schemas.Tag` structs for the market.
+
+  ## Examples
+
+      Polymarket.Gamma.get_market_tags(2_691_932)
+
+  """
+  @spec get_market_tags(non_neg_integer() | String.t()) ::
+          {:ok, [Tag.t()]} | {:error, :get_market_tags_failed}
+  def get_market_tags(market_id) do
+    with {:ok, raw} when is_list(raw) <- get_request("#{@url}/markets/#{market_id}/tags", []),
+         {:ok, tags} <- parse_tags(raw) do
+      {:ok, tags}
+    else
+      _err -> {:error, :get_market_tags_failed}
+    end
+  end
+
   # ---------------------------------------------------------------------------#
   #                                Helpers                                     #
   # ---------------------------------------------------------------------------#
+
+  # Parse a list of raw tag attrs, failing fast if any element is invalid.
+  @spec parse_tags([map()]) :: {:ok, [Tag.t()]} | {:error, Ecto.Changeset.t()}
+  defp parse_tags(raw) do
+    raw
+    |> Enum.reduce_while({:ok, []}, fn attrs, {:ok, acc} ->
+      case Tag.from_attrs(attrs) do
+        {:ok, tag} -> {:cont, {:ok, [tag | acc]}}
+        {:error, _changeset} = error -> {:halt, error}
+      end
+    end)
+    |> case do
+      {:ok, tags} -> {:ok, Enum.reverse(tags)}
+      error -> error
+    end
+  end
 
   @spec get_request(String.t(), keyword()) :: {:ok, term()} | {:error, :failed_to_get}
   defp get_request(url, params) do

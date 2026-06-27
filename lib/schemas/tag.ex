@@ -7,6 +7,9 @@ defmodule Polymarket.Schemas.Tag do
 
   import Ecto.Changeset
 
+  alias Polymarket.JsonUtil
+  alias Polymarket.Schemas.Tag
+
   @primary_key false
 
   typed_embedded_schema do
@@ -30,5 +33,24 @@ defmodule Polymarket.Schemas.Tag do
     castable = __MODULE__.__schema__(:fields) -- __MODULE__.__schema__(:embeds)
 
     cast(tag, attrs, castable)
+  end
+
+  @doc """
+  Create a `Tag` from the raw (JSON-decoded) attributes returned by the Gamma
+  API. Keys may be in `camelCase` (atom or string); they are normalised to the
+  `snake_case` schema fields. Returns an error if the attributes are not valid.
+  """
+  @spec from_attrs(map()) :: {:ok, t()} | {:error, Ecto.Changeset.t()}
+  def from_attrs(attrs) do
+    attrs
+    |> JsonUtil.snake_case_keys()
+    |> then(&changeset(%Tag{}, &1))
+    |> case do
+      %{valid?: true} = changeset ->
+        {:ok, apply_changes(changeset)}
+
+      changeset ->
+        {:error, changeset}
+    end
   end
 end
