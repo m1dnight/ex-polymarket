@@ -42,6 +42,33 @@ defmodule Polymarket.Gamma do
     end
   end
 
+  @doc """
+  Retrieves a single market by its unique slug.
+
+  Returns detailed information about a market.
+
+  ## Options
+
+  `opts` are sent verbatim as query parameters. The Gamma API supports:
+
+    * `:include_tag` - when `true`, includes the market's `tags` in the response.
+
+  ## Examples
+
+      Polymarket.Gamma.get_market_by_slug("sol-updown-5m-1782566100", include_tag: true)
+
+  """
+  @spec get_market_by_slug(String.t(), options()) ::
+          {:ok, Market.t()} | {:error, :get_market_failed}
+  def get_market_by_slug(slug, opts \\ []) do
+    with {:ok, raw} <- get_request("#{@url}/markets/slug/#{slug}", opts),
+         {:ok, market} <- Market.from_attrs(raw) do
+      {:ok, market}
+    else
+      _err -> {:error, :get_market_failed}
+    end
+  end
+
   # ---------------------------------------------------------------------------#
   #                                Helpers                                     #
   # ---------------------------------------------------------------------------#
