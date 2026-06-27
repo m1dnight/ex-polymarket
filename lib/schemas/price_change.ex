@@ -22,8 +22,10 @@ defmodule Polymarket.Schemas.PriceChange do
   @doc false
   @spec changeset(t(), map()) :: Ecto.Changeset.t()
   def changeset(price_change, attrs) do
+    castable = __MODULE__.__schema__(:fields) -- __MODULE__.__schema__(:embeds)
+
     price_change
-    |> cast(attrs, [:asset_id, :price, :size, :side, :hash, :best_bid, :best_ask])
+    |> cast(attrs, castable)
     |> validate_required([:asset_id, :price, :size, :side, :hash, :best_bid, :best_ask])
   end
 end

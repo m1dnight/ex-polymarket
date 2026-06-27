@@ -24,8 +24,10 @@ defmodule Polymarket.Schemas.PriceChangeEvent do
   @doc false
   @spec changeset(t(), map()) :: Ecto.Changeset.t()
   def changeset(event, attrs) do
+    castable = __MODULE__.__schema__(:fields) -- __MODULE__.__schema__(:embeds)
+
     event
-    |> cast(attrs, [:market, :timestamp, :event_type])
+    |> cast(attrs, castable)
     |> validate_required([:market, :timestamp, :event_type])
     |> cast_embed(:price_changes)
   end

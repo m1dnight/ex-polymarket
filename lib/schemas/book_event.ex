@@ -30,8 +30,10 @@ defmodule Polymarket.Schemas.BookEvent do
   @doc false
   @spec changeset(t(), map()) :: Ecto.Changeset.t()
   def changeset(event, attrs) do
+    castable = __MODULE__.__schema__(:fields) -- __MODULE__.__schema__(:embeds)
+
     event
-    |> cast(attrs, [:market, :asset_id, :hash, :timestamp, :event_type, :tick_size, :last_trade_price])
+    |> cast(attrs, castable)
     |> validate_required([:market, :asset_id, :hash, :timestamp, :event_type])
     |> cast_embed(:bids)
     |> cast_embed(:asks)

@@ -20,6 +20,8 @@ defmodule Polymarket.Schemas.EventMessage do
   @doc false
   @spec changeset(t(), map()) :: Ecto.Changeset.t()
   def changeset(event_message, attrs) do
-    cast(event_message, attrs, [:id, :description, :title, :ticker, :slug])
+    castable = __MODULE__.__schema__(:fields) -- __MODULE__.__schema__(:embeds)
+
+    cast(event_message, attrs, castable)
   end
 end

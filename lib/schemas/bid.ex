@@ -17,8 +17,10 @@ defmodule Polymarket.Schemas.Bid do
   @doc false
   @spec changeset(t(), map()) :: Ecto.Changeset.t()
   def changeset(bid, attrs) do
+    castable = __MODULE__.__schema__(:fields) -- __MODULE__.__schema__(:embeds)
+
     bid
-    |> cast(attrs, [:price, :size])
+    |> cast(attrs, castable)
     |> validate_required([:price, :size])
   end
 end

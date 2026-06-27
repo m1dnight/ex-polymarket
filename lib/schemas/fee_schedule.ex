@@ -19,6 +19,8 @@ defmodule Polymarket.Schemas.FeeSchedule do
   @doc false
   @spec changeset(t(), map()) :: Ecto.Changeset.t()
   def changeset(fee_schedule, attrs) do
-    cast(fee_schedule, attrs, [:exponent, :rate, :rebate_rate, :taker_only])
+    castable = __MODULE__.__schema__(:fields) -- __MODULE__.__schema__(:embeds)
+
+    cast(fee_schedule, attrs, castable)
   end
 end

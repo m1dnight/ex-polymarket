@@ -46,29 +46,10 @@ defmodule Polymarket.Schemas.NewMarketEvent do
   @doc false
   @spec changeset(t(), map()) :: Ecto.Changeset.t()
   def changeset(event, attrs) do
+    castable = __MODULE__.__schema__(:fields) -- __MODULE__.__schema__(:embeds)
+
     event
-    |> cast(attrs, [
-      :id,
-      :active,
-      :line,
-      :description,
-      :question,
-      :market,
-      :condition_id,
-      :slug,
-      :tags,
-      :clob_token_ids,
-      :assets_ids,
-      :outcomes,
-      :taker_base_fee,
-      :order_price_min_tick_size,
-      :fees_enabled,
-      :group_item_title,
-      :game_start_time,
-      :sports_market_type,
-      :timestamp,
-      :event_type
-    ])
+    |> cast(attrs, castable)
     |> validate_required([:id, :market, :condition_id, :timestamp, :event_type])
     |> cast_embed(:fee_schedule)
     |> cast_embed(:event_message)
