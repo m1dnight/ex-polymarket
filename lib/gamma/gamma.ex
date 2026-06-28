@@ -3,6 +3,7 @@ defmodule Polymarket.Gamma do
   Client for the Polymarket Gamma REST API (https://gamma-api.polymarket.com).
   """
 
+  alias Polymarket.Http
   alias Polymarket.Schemas.Market
   alias Polymarket.Schemas.Tag
 
@@ -35,7 +36,7 @@ defmodule Polymarket.Gamma do
   @spec get_market_by_id(non_neg_integer() | String.t(), options()) ::
           {:ok, Market.t()} | {:error, :get_market_failed}
   def get_market_by_id(market_id, opts \\ []) do
-    with {:ok, raw} <- get_request("#{@url}/markets/#{market_id}", opts),
+    with {:ok, raw} <- Http.get("#{@url}/markets/#{market_id}", opts, __MODULE__),
          {:ok, market} <- Market.from_attrs(raw) do
       {:ok, market}
     else
@@ -62,7 +63,7 @@ defmodule Polymarket.Gamma do
   @spec get_market_by_slug(String.t(), options()) ::
           {:ok, Market.t()} | {:error, :get_market_failed}
   def get_market_by_slug(slug, opts \\ []) do
-    with {:ok, raw} <- get_request("#{@url}/markets/slug/#{slug}", opts),
+    with {:ok, raw} <- Http.get("#{@url}/markets/slug/#{slug}", opts, __MODULE__),
          {:ok, market} <- Market.from_attrs(raw) do
       {:ok, market}
     else
@@ -83,7 +84,7 @@ defmodule Polymarket.Gamma do
   @spec get_market_tags(non_neg_integer() | String.t()) ::
           {:ok, [Tag.t()]} | {:error, :get_market_tags_failed}
   def get_market_tags(market_id) do
-    with {:ok, raw} when is_list(raw) <- get_request("#{@url}/markets/#{market_id}/tags", []),
+    with {:ok, raw} when is_list(raw) <- Http.get("#{@url}/markets/#{market_id}/tags", [], __MODULE__),
          {:ok, tags} <- parse_tags(raw) do
       {:ok, tags}
     else
@@ -109,37 +110,5 @@ defmodule Polymarket.Gamma do
       {:ok, tags} -> {:ok, Enum.reverse(tags)}
       error -> error
     end
-  end
-
-  @spec get_request(String.t(), keyword()) :: {:ok, term()} | {:error, :failed_to_get}
-  defp get_request(url, params) do
-    # Array-valued params (e.g. `clob_token_ids: ["1", "2"]`) become repeated
-    # query params (`?clob_token_ids=1&clob_token_ids=2`); Req itself rejects
-    # list values.
-    params =
-      Enum.flat_map(params, fn
-        {key, values} when is_list(values) -> Enum.map(values, &{key, &1})
-        pair -> [pair]
-      end)
-
-    options =
-      [decode_json: [keys: :atoms], params: params]
-      |> Keyword.merge(req_options())
-
-    response = Req.get!(url, options)
-
-    case response do
-      %{status: 200, body: body} ->
-        {:ok, body}
-
-      _ ->
-        {:error, :failed_to_get}
-    end
-  end
-
-  # Extra options merged into every request, e.g. a `Req.Test` stub in tests.
-  @spec req_options() :: keyword()
-  defp req_options do
-    Application.get_env(:ex_polymarket, :req_options, [])
   end
 end
