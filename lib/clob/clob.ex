@@ -1,12 +1,28 @@
 defmodule Polymarket.Clob do
   @moduledoc """
   Client for the Polymarket CLOB REST API (https://clob.polymarket.com).
+
+  The base URL defaults to production but can be pointed at another deployment —
+  e.g. the staging host `https://clob-staging.polymarket.com` — with:
+
+      config :ex_polymarket, :clob_url, "https://clob-staging.polymarket.com"
+
+  Remember to match the chain id to the deployment when authenticating: `137`
+  (Polygon) for production, `80002` (Amoy) for the testnet.
   """
 
+  alias Polymarket.Clob.ClobAuth
+  alias Polymarket.Clob.HmacAuth
+  alias Polymarket.Clob.OrderPayload
+  alias Polymarket.Crypto
   alias Polymarket.Http
+  alias Polymarket.Schemas.ClobError
+  alias Polymarket.Schemas.Credentials
   alias Polymarket.Schemas.MarketByToken
+  alias Polymarket.Schemas.SendOrder
+  alias Polymarket.Schemas.SendOrderResponse
 
-  @url "https://clob.polymarket.com"
+  @default_url "https://clob.polymarket.com"
 
   @doc """
   Resolves a token ID to its parent market.
@@ -22,11 +38,104 @@ defmodule Polymarket.Clob do
   @spec get_market_by_token(String.t()) ::
           {:ok, MarketByToken.t()} | {:error, :get_market_by_token_failed}
   def get_market_by_token(token_id) do
-    with {:ok, raw} <- Http.get("#{@url}/markets-by-token/#{token_id}", [], __MODULE__),
+    with {:ok, raw} <- Http.get("#{base_url()}/markets-by-token/#{token_id}", [], __MODULE__),
          {:ok, market} <- MarketByToken.from_attrs(raw) do
       {:ok, market}
     else
       _err -> {:error, :get_market_by_token_failed}
+    end
+  end
+
+  @doc """
+  Derives this wallet's existing CLOB API credentials.
+
+  Signs an L1 `ClobAuth` message with `private_key` (see `Polymarket.Clob.ClobAuth`)
+  and calls `GET /auth/derive-api-key`, returning the deterministic credentials the
+  CLOB has already associated with the wallet's address on `chain_id` (137 Polygon
+  / 80002 Amoy).
+
+  `opts` accepts `:nonce` (the API-key slot, default `0`) and `:timestamp` (Unix
+  seconds, default the current system time).
+  """
+  @spec derive_api_key(Crypto.private_key(), integer(), keyword()) ::
+          {:ok, Credentials.t()} | {:error, :derive_api_key_failed}
+  def derive_api_key(private_key, chain_id, opts \\ []) do
+    headers = auth_headers(private_key, chain_id, opts)
+
+    with {:ok, raw} <- Http.get("#{base_url()}/auth/derive-api-key", [], __MODULE__, headers),
+         {:ok, credentials} <- Credentials.from_attrs(raw) do
+      {:ok, with_owner_address(credentials, private_key)}
+    else
+      _err -> {:error, :derive_api_key_failed}
+    end
+  end
+
+  @doc """
+  Creates new CLOB API credentials for this wallet.
+
+  Signs an L1 `ClobAuth` message with `private_key` and calls
+  `POST /auth/api-key`, returning freshly minted credentials. Accepts the same
+  `opts` as `derive_api_key/3`.
+  """
+  @spec create_api_key(Crypto.private_key(), integer(), keyword()) ::
+          {:ok, Credentials.t()} | {:error, :create_api_key_failed}
+  def create_api_key(private_key, chain_id, opts \\ []) do
+    headers = auth_headers(private_key, chain_id, opts)
+
+    with {:ok, raw} <- Http.post("#{base_url()}/auth/api-key", "", __MODULE__, headers),
+         {:ok, credentials} <- Credentials.from_attrs(raw) do
+      {:ok, with_owner_address(credentials, private_key)}
+    else
+      _err -> {:error, :create_api_key_failed}
+    end
+  end
+
+  @doc """
+  Creates new credentials, falling back to deriving existing ones.
+
+  Mirrors the reference client: tries `create_api_key/3` first and, if it fails
+  (e.g. the wallet already has a key), returns `derive_api_key/3` instead. Accepts
+  the same `opts` as those functions.
+  """
+  @spec create_or_derive_api_key(Crypto.private_key(), integer(), keyword()) ::
+          {:ok, Credentials.t()} | {:error, :derive_api_key_failed}
+  def create_or_derive_api_key(private_key, chain_id, opts \\ []) do
+    case create_api_key(private_key, chain_id, opts) do
+      {:ok, credentials} -> {:ok, credentials}
+      {:error, _reason} -> derive_api_key(private_key, chain_id, opts)
+    end
+  end
+
+  @doc """
+  Submits a caller-constructed, already-signed order to `POST /order`.
+
+  Takes a `Polymarket.Schemas.SendOrder` — the exact CLOB request payload, which the
+  caller builds: sign the order with `Polymarket.Clob.OrderSigner`, fold the
+  signature in, and set `owner`/`order_type`/flags. This function only serialises it,
+  authenticates the request with L2 HMAC headers derived from `credentials`, and
+  posts it.
+
+  `credentials` must come from the auth functions (so its `address` — the api-key
+  owner EOA — is populated); that address is sent as the `POLY_ADDRESS` header.
+  Note this is the *signing* wallet, not the order's `maker`/`signer` (which, for a
+  `:poly1271` deposit-wallet order, is the funder contract).
+
+  `opts`: `:timestamp` (Unix seconds, default now) for the L2 signature.
+
+  Returns `{:ok, %Polymarket.Schemas.SendOrderResponse{}}` on success, or
+  `{:error, %Polymarket.Schemas.ClobError{}}` when the CLOB rejects the order (e.g.
+  an unfunded wallet's insufficient-balance error).
+  """
+  @spec post_order(SendOrder.t(), Credentials.t(), keyword()) ::
+          {:ok, SendOrderResponse.t()} | {:error, ClobError.t()}
+  def post_order(%SendOrder{} = send_order, %Credentials{address: <<_::160>>} = credentials, opts \\ []) do
+    body = OrderPayload.serialize(send_order)
+    timestamp = Keyword.get(opts, :timestamp, System.os_time(:second))
+    headers = HmacAuth.headers(credentials.address, credentials, "POST", "/order", body, timestamp)
+
+    case Http.post("#{base_url()}/order", body, __MODULE__, headers) do
+      {:ok, raw} -> {:ok, SendOrderResponse.from_attrs(raw)}
+      {:error, {status, raw}} -> {:error, ClobError.from_response(status, raw)}
     end
   end
 
@@ -45,7 +154,7 @@ defmodule Polymarket.Clob do
   """
   @spec get_server_time() :: {:ok, integer()} | {:error, :get_server_time_failed}
   def get_server_time do
-    case Http.get("#{@url}/time", [], __MODULE__) do
+    case Http.get("#{base_url()}/time", [], __MODULE__) do
       {:ok, time} -> parse_server_time(time)
       _err -> {:error, :get_server_time_failed}
     end
@@ -71,6 +180,26 @@ defmodule Polymarket.Clob do
     else
       _err -> {:error, :get_server_time_failed}
     end
+  end
+
+  # The CLOB base URL: production by default, overridable for staging/testnet.
+  @spec base_url() :: String.t()
+  defp base_url, do: Application.get_env(:ex_polymarket, :clob_url, @default_url)
+
+  # Builds the L1 auth headers from `opts` (`:nonce` default 0, `:timestamp`
+  # default the current system time in Unix seconds).
+  @spec auth_headers(Crypto.private_key(), integer(), keyword()) :: [Http.header()]
+  defp auth_headers(private_key, chain_id, opts) do
+    nonce = Keyword.get(opts, :nonce, 0)
+    timestamp = Keyword.get(opts, :timestamp, System.os_time(:second))
+    ClobAuth.headers(private_key, timestamp, nonce, chain_id)
+  end
+
+  # Records the api-key owner's address on the credentials, for the L2
+  # `POLY_ADDRESS` header. `from_attrs/1` can't know it (it's not in the JSON).
+  @spec with_owner_address(Credentials.t(), Crypto.private_key()) :: Credentials.t()
+  defp with_owner_address(credentials, private_key) do
+    %{credentials | address: Crypto.address_from_private_key(private_key)}
   end
 
   # The endpoint returns the Unix timestamp as a string, though staging has been
