@@ -57,6 +57,8 @@ defmodule Polymarket.MixProject do
       {:typed_ecto_schema, "~> 0.4.3"},
       {:recase, "~> 0.9"},
       {:req, "~> 0.5"},
+      {:ex_keccak, "~> 0.7.8"},
+      {:ex_secp256k1, "~> 0.8.0"},
       {:plug, "~> 1.0", only: :test},
       {:quokka, "~> 2.13", only: [:dev, :test], runtime: false},
       {:credo, "~> 1.7", only: [:dev, :test], runtime: false},
