@@ -2,6 +2,7 @@ defmodule Polymarket.GammaTest do
   use ExUnit.Case, async: true
 
   alias Polymarket.Gamma
+  alias Polymarket.Schemas.Event
   alias Polymarket.Schemas.FeeSchedule
   alias Polymarket.Schemas.Market
   alias Polymarket.Schemas.Tag
@@ -24,6 +25,14 @@ defmodule Polymarket.GammaTest do
               |> String.split("\n", trim: true)
               |> hd()
               |> Jason.decode!()
+
+  # The keyset events fixture: a full (camelCase, string-keyed) response so
+  # Req.Test can re-encode it as the API would. We slice it into small pages to
+  # exercise pagination without standing up the whole payload.
+  @events_attrs "test/fixtures/gamma/events_keyset.txt"
+                |> File.read!()
+                |> Jason.decode!()
+                |> Map.fetch!("events")
 
   describe "get_market_by_id/1" do
     test "requests the right URL and parses the market on a 200 response" do
@@ -183,6 +192,105 @@ defmodule Polymarket.GammaTest do
       end)
 
       assert {:error, :get_market_tags_failed} = Gamma.get_market_tags(@market_id)
+    end
+  end
+
+  describe "list_events/1" do
+    test "requests the right URL and parses a page of events on a 200 response" do
+      Req.Test.stub(Polymarket.Gamma, fn conn ->
+        assert conn.method == "GET"
+        assert conn.request_path == "/events/keyset"
+        Req.Test.json(conn, %{"events" => @events_attrs, "next_cursor" => "CURSOR2"})
+      end)
+
+      assert {:ok, %{events: events, next_cursor: "CURSOR2"}} = Gamma.list_events()
+      assert length(events) == length(@events_attrs)
+      assert [%Event{} | _] = events
+      assert hd(events).id == hd(@events_attrs)["id"]
+    end
+
+    test "returns a nil next_cursor on the last page" do
+      Req.Test.stub(Polymarket.Gamma, fn conn ->
+        Req.Test.json(conn, %{"events" => @events_attrs})
+      end)
+
+      assert {:ok, %{next_cursor: nil}} = Gamma.list_events()
+    end
+
+    test "forwards query options to the request" do
+      Req.Test.stub(Polymarket.Gamma, fn conn ->
+        assert URI.decode_query(conn.query_string) == %{"limit" => "100", "closed" => "false"}
+        Req.Test.json(conn, %{"events" => @events_attrs})
+      end)
+
+      assert {:ok, _} = Gamma.list_events(limit: 100, closed: false)
+    end
+
+    test "returns an error on a non-200 response" do
+      Req.Test.stub(Polymarket.Gamma, fn conn ->
+        Plug.Conn.send_resp(conn, 404, "Not Found")
+      end)
+
+      assert {:error, :list_events_failed} = Gamma.list_events()
+    end
+
+    test "returns an error when the body is not a keyset response" do
+      Req.Test.stub(Polymarket.Gamma, fn conn ->
+        Req.Test.json(conn, %{"unexpected" => "shape"})
+      end)
+
+      assert {:error, :list_events_failed} = Gamma.list_events()
+    end
+
+    test "returns an error when an event in the payload is invalid" do
+      Req.Test.stub(Polymarket.Gamma, fn conn ->
+        Req.Test.json(conn, %{"events" => [%{"id" => "1"}]})
+      end)
+
+      assert {:error, :list_events_failed} = Gamma.list_events()
+    end
+  end
+
+  describe "stream_events/1" do
+    test "follows next_cursor across pages and yields every event" do
+      [page1, page2] = Enum.chunk_every(@events_attrs, ceil(length(@events_attrs) / 2))
+
+      Req.Test.stub(Polymarket.Gamma, fn conn ->
+        case URI.decode_query(conn.query_string)["after_cursor"] do
+          nil -> Req.Test.json(conn, %{"events" => page1, "next_cursor" => "CURSOR2"})
+          "CURSOR2" -> Req.Test.json(conn, %{"events" => page2})
+        end
+      end)
+
+      events = Gamma.stream_events() |> Enum.to_list()
+
+      assert length(events) == length(@events_attrs)
+      assert Enum.all?(events, &match?(%Event{}, &1))
+      assert Enum.map(events, & &1.id) == Enum.map(@events_attrs, & &1["id"])
+    end
+
+    test "is lazy: only fetches pages as they are consumed" do
+      {:ok, calls} = Agent.start_link(fn -> 0 end)
+
+      Req.Test.stub(Polymarket.Gamma, fn conn ->
+        Agent.update(calls, &(&1 + 1))
+        # Every page reports a next_cursor, so the stream would page forever if
+        # fully enumerated; taking 1 must stop after a single request.
+        Req.Test.json(conn, %{"events" => Enum.take(@events_attrs, 1), "next_cursor" => "MORE"})
+      end)
+
+      assert [%Event{}] = Gamma.stream_events() |> Enum.take(1)
+      assert Agent.get(calls, & &1) == 1
+    end
+
+    test "raises when a page fails to fetch" do
+      Req.Test.stub(Polymarket.Gamma, fn conn ->
+        Plug.Conn.send_resp(conn, 404, "Not Found")
+      end)
+
+      assert_raise RuntimeError, ~r/stream_events failed/, fn ->
+        Gamma.stream_events() |> Enum.to_list()
+      end
     end
   end
 end

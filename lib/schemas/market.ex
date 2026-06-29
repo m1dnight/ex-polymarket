@@ -46,17 +46,22 @@ defmodule Polymarket.Schemas.Market do
     field(:created_by, :integer)
     field(:updated_by, :integer)
     field(:category, :string)
+    field(:subcategory, :string)
     field(:market_type, :string)
     field(:format_type, :string)
     field(:market_group, :integer)
     field(:curation_order, :integer)
     field(:score, :integer)
     field(:twitter_card_image, :string)
+    field(:twitter_card_location, :string)
+    field(:twitter_card_last_refreshed, :string)
+    field(:twitter_card_last_validated, :string)
     field(:sponsor_name, :string)
     field(:sponsor_image, :string)
     field(:chart_color, :string)
     field(:series_color, :string)
     field(:mailchimp_tag, :string)
+    field(:category_mailchimp_tag, :string)
     field(:disqus_thread, :string)
     field(:past_slugs, :string)
     field(:game_id, :string)
@@ -108,6 +113,7 @@ defmodule Polymarket.Schemas.Market do
     field(:ready_for_cron, :boolean)
     field(:comments_enabled, :boolean)
     field(:notifications_enabled, :boolean)
+    field(:sent_discord, :boolean)
     field(:fpmm_live, :boolean)
 
     # Dates
@@ -122,12 +128,15 @@ defmodule Polymarket.Schemas.Market do
     field(:deploying_timestamp, :utc_datetime_usec)
     field(:event_start_time, :utc_datetime_usec)
     field(:game_start_time, :utc_datetime_usec)
-    field(:uma_end_date, :utc_datetime_usec)
     field(:ready_timestamp, :utc_datetime_usec)
     field(:funded_timestamp, :utc_datetime_usec)
     field(:scheduled_deployment_timestamp, :utc_datetime_usec)
-    # Spec types this as a plain string (no `date-time` format), unlike the
-    # other `*_iso` fields which the fixtures prove are dates.
+    # The spec types both of these as plain strings (no `date-time` format).
+    # `GET /markets` returns ISO timestamps for `uma_end_date`, but the events
+    # endpoint returns free-form dates (e.g. "April 25, 2022") for older markets,
+    # so it is kept a string. The `*_iso` fields, by contrast, the fixtures prove
+    # are dates.
+    field(:uma_end_date, :string)
     field(:uma_end_date_iso, :string)
 
     # Pricing / order book state
