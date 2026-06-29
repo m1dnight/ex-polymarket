@@ -123,6 +123,35 @@ defmodule Polymarket.Gamma do
   end
 
   @doc """
+  Retrieves a single event by its unique slug using `GET /events/slug/{slug}`.
+
+  Returns the parsed `Polymarket.Schemas.Event`, including its nested `markets`,
+  `series`, `tags`, and `event_metadata`.
+
+  ## Options
+
+  `opts` are sent verbatim as query parameters. The Gamma API supports:
+
+    * `:include_chat` - when `true`, includes the event's chat channels.
+    * `:include_template` - when `true`, includes the event's templates.
+
+  ## Examples
+
+      Polymarket.Gamma.get_event_by_slug("nba-mavericks-grizzlies-2021-12-04")
+
+  """
+  @spec get_event_by_slug(String.t(), keyword()) ::
+          {:ok, Event.t()} | {:error, :get_event_failed}
+  def get_event_by_slug(slug, opts \\ []) do
+    with {:ok, raw} <- Http.get("#{@url}/events/slug/#{slug}", opts, __MODULE__),
+         {:ok, event} <- Event.from_attrs(raw) do
+      {:ok, event}
+    else
+      _err -> {:error, :get_event_failed}
+    end
+  end
+
+  @doc """
   Fetches a single page of events using the keyset (cursor) pagination endpoint
   `GET /events/keyset`.
 
