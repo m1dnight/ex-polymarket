@@ -321,6 +321,71 @@ defmodule Polymarket.ClobTest do
     end
   end
 
+  describe "post_orders/3" do
+    test "posts a JSON array to /orders, HMAC-signs the bytes, and parses each response" do
+      sell = %{@send_order | order: %{@order | side: :sell}}
+
+      Req.Test.stub(Polymarket.Clob, fn conn ->
+        assert conn.method == "POST"
+        assert conn.request_path == "/orders"
+
+        {:ok, raw_body, conn} = Plug.Conn.read_body(conn)
+        sent = Jason.decode!(raw_body)
+        assert [a, b] = sent
+        assert a["order"]["side"] == "BUY"
+        assert b["order"]["side"] == "SELL"
+
+        # The HMAC covers exactly the array bytes; POLY_ADDRESS is the owner EOA.
+        expected = HmacAuth.sign(@credentials.secret, "1POST/orders#{raw_body}")
+        assert Plug.Conn.get_req_header(conn, "poly_signature") == [expected]
+
+        assert Plug.Conn.get_req_header(conn, "poly_address") ==
+                 ["0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266"]
+
+        Req.Test.json(conn, [
+          %{"success" => true, "orderID" => "0xlive", "status" => "live"},
+          %{
+            "success" => true,
+            "orderID" => "0xmatched",
+            "status" => "matched",
+            "transactionsHashes" => ["0xtx"],
+            "tradeIDs" => ["trade-1"]
+          }
+        ])
+      end)
+
+      assert {:ok, [live, matched]} =
+               Clob.post_orders([@send_order, sell], @credentials, timestamp: 1)
+
+      assert %SendOrderResponse{status: "live", order_id: "0xlive"} = live
+      assert matched.status == "matched"
+      assert matched.transactions_hashes == ["0xtx"]
+      assert matched.trade_ids == ["trade-1"]
+    end
+
+    test "surfaces a too-many-orders rejection as a ClobError" do
+      Req.Test.stub(Polymarket.Clob, fn conn ->
+        Plug.Conn.send_resp(conn, 400, ~s({"error":"Too many orders in payload: 20, max allowed: 15"}))
+      end)
+
+      assert {:error, %ClobError{} = error} =
+               Clob.post_orders([@send_order], @credentials, timestamp: 1)
+
+      assert error.status == 400
+      assert error.error == "Too many orders in payload: 20, max allowed: 15"
+    end
+
+    test "returns an empty list when the server accepts an empty batch" do
+      Req.Test.stub(Polymarket.Clob, fn conn ->
+        {:ok, raw_body, conn} = Plug.Conn.read_body(conn)
+        assert raw_body == "[]"
+        Req.Test.json(conn, [])
+      end)
+
+      assert {:ok, []} = Clob.post_orders([], @credentials, timestamp: 1)
+    end
+  end
+
   describe "get_server_time/0" do
     test "requests /time and parses the string timestamp on a 200 response" do
       Req.Test.stub(Polymarket.Clob, fn conn ->

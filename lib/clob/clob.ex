@@ -140,6 +140,37 @@ defmodule Polymarket.Clob do
   end
 
   @doc """
+  Submits a batch of caller-constructed, already-signed orders to `POST /orders`.
+
+  The batch form of `post_order/3`: takes a list of `Polymarket.Schemas.SendOrder`s
+  (each built and signed exactly as for `post_order/3`), serialises them into one
+  JSON array, authenticates the request with L2 HMAC headers from `credentials`, and
+  posts it. The CLOB processes the orders in parallel and caps a batch at 15; that
+  limit is enforced server-side (a `400` `ClobError` otherwise).
+
+  `credentials` must come from the auth functions (so its `address` — the api-key
+  owner EOA — is set for the `POLY_ADDRESS` header). `opts`: `:timestamp` (Unix
+  seconds, default now) for the L2 signature.
+
+  Returns `{:ok, [%Polymarket.Schemas.SendOrderResponse{}]}` — one entry per order,
+  in request order, each with its own `success`/`status` — or
+  `{:error, %Polymarket.Schemas.ClobError{}}` when the CLOB rejects the whole request
+  (e.g. an empty or over-15 batch, or an auth failure).
+  """
+  @spec post_orders([SendOrder.t()], Credentials.t(), keyword()) ::
+          {:ok, [SendOrderResponse.t()]} | {:error, ClobError.t()}
+  def post_orders(send_orders, %Credentials{address: <<_::160>>} = credentials, opts \\ []) when is_list(send_orders) do
+    body = OrderPayload.serialize_many(send_orders)
+    timestamp = Keyword.get(opts, :timestamp, System.os_time(:second))
+    headers = HmacAuth.headers(credentials.address, credentials, "POST", "/orders", body, timestamp)
+
+    case Http.post("#{base_url()}/orders", body, __MODULE__, headers) do
+      {:ok, raw} -> {:ok, raw |> List.wrap() |> Enum.map(&SendOrderResponse.from_attrs/1)}
+      {:error, {status, raw}} -> {:error, ClobError.from_response(status, raw)}
+    end
+  end
+
+  @doc """
   Returns the current server time as a Unix timestamp (seconds since the epoch).
 
   Useful for synchronising a local clock with the CLOB server before signing

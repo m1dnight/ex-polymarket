@@ -80,6 +80,25 @@ defmodule Polymarket.Clob.OrderPayloadTest do
     end
   end
 
+  describe "serialize_many/1 (batch POST /orders body)" do
+    test "produces a JSON array whose elements equal the single-order bodies" do
+      sell = %{@send_order | order: %{@order | side: :sell}, order_type: :fok}
+
+      assert [first, second] = Jason.decode!(OrderPayload.serialize_many([@send_order, sell]))
+      assert first == decoded(OrderPayload.serialize(@send_order))
+      assert second == decoded(OrderPayload.serialize(sell))
+    end
+
+    test "preserves order and matches the reference single-order wire body" do
+      assert [only] = Jason.decode!(OrderPayload.serialize_many([@send_order]))
+      assert only == decoded(@rust_minimal)
+    end
+
+    test "serialises an empty batch as an empty JSON array" do
+      assert OrderPayload.serialize_many([]) == "[]"
+    end
+  end
+
   @spec decoded(String.t()) :: map()
   defp decoded(json), do: Jason.decode!(json)
 end
