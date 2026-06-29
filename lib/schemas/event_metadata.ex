@@ -11,6 +11,8 @@ defmodule Polymarket.Schemas.EventMetadata do
 
   typed_embedded_schema do
     field(:context_requires_regen, :boolean)
+    field(:context_description, :string)
+    field(:context_updated_at, :utc_datetime_usec)
   end
 
   @doc false

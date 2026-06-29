@@ -9,10 +9,12 @@ defmodule Polymarket.Schemas.Event do
 
   The `markets`, `series`, `tags`, and `event_metadata` relations are always
   returned by the keyset endpoint and are parsed into their respective schemas.
-  Field coverage follows what the keyset endpoint returns; the remaining nested
-  relational objects documented in the OpenAPI spec (`collections`,
-  `eventCreators`, `chats`, `templates`, `imageOptimized`, ...) are intentionally
-  omitted as the keyset endpoint does not return them.
+  Every scalar field in the Gamma `Event` OpenAPI schema is mapped (covering both
+  the keyset and single-event endpoints). The nested relational objects in that
+  spec (`bestLines`, `collections`, `eventCreators`, `externalPartners`,
+  `internalUsers`, `sport`, `teams`, `templates`, the `*Optimized` image objects,
+  ...) are intentionally omitted; only `markets`, `series`, `tags`, and
+  `eventMetadata` are modelled as embedded relations.
   """
 
   use TypedEctoSchema
@@ -40,9 +42,23 @@ defmodule Polymarket.Schemas.Event do
     field(:subcategory, :string)
     field(:series_slug, :string)
     field(:sort_by, :string)
+    field(:gmp_chart_mode, :string)
     field(:image, :string)
     field(:icon, :string)
     field(:updated_by, :string)
+    field(:created_by, :string)
+    field(:color, :string)
+    field(:country_name, :string)
+    field(:election_type, :string)
+    field(:neg_risk_market_id, :string)
+    field(:subtitle, :string)
+    field(:featured_image, :string)
+    field(:carousel_map, :string)
+    field(:disqus_thread, :string)
+    field(:estimated_value, :string)
+    field(:template_variables, :string)
+    field(:last_highlight, :string)
+    field(:last_highlight_type, :string)
 
     # Status flags
     field(:active, :boolean)
@@ -57,12 +73,26 @@ defmodule Polymarket.Schemas.Event do
     field(:comments_enabled, :boolean)
     field(:enable_neg_risk, :boolean)
     field(:neg_risk_augmented, :boolean)
+    field(:neg_risk, :boolean)
+    field(:enable_order_book, :boolean)
+    field(:automatically_active, :boolean)
+    field(:cumulative_markets, :boolean)
     field(:requires_translation, :boolean)
     field(:show_all_outcomes, :boolean)
     field(:show_market_images, :boolean)
+    # The Gamma API emits `estimateValue` as a boolean `false` (not a number);
+    # `estimated_value` is a separate string field (in the Identity block above).
+    field(:estimate_value, :boolean)
+    field(:automatically_resolved, :boolean)
+    field(:cant_estimate, :boolean)
+    field(:is_template, :boolean)
 
     # Counts / volume / liquidity
     field(:comment_count, :integer)
+    field(:featured_order, :integer)
+    field(:neg_risk_fee_bips, :integer)
+    field(:parent_event_id, :integer)
+    field(:tweet_count, :integer)
     field(:competitive, :float)
     field(:liquidity, :float)
     field(:liquidity_amm, :float)
@@ -82,6 +112,30 @@ defmodule Polymarket.Schemas.Event do
     field(:updated_at, :utc_datetime_usec)
     field(:closed_time, :utc_datetime_usec)
     field(:published_at, :utc_datetime_usec)
+    field(:deploying_timestamp, :utc_datetime_usec)
+    field(:start_time, :utc_datetime_usec)
+    field(:event_date, :date)
+    field(:last_highlight_at, :utc_datetime_usec)
+    field(:scheduled_deployment_timestamp, :utc_datetime_usec)
+
+    # Sports / live-event metadata (only populated for sports-market events)
+    field(:live, :boolean)
+    field(:ended, :boolean)
+    field(:elapsed, :string)
+    field(:period, :string)
+    field(:score, :string)
+    field(:turn_provider_id, :string)
+    field(:event_week, :integer)
+    field(:game_id, :integer)
+    field(:rescheduled_from_game_id, :integer)
+    field(:spreads_main_line, :float)
+    field(:totals_main_line, :float)
+    field(:finished_timestamp, :utc_datetime_usec)
+
+    # Array fields
+    field(:sub_events, {:array, :string})
+    field(:tag_labels, {:array, :string})
+    field(:tag_slugs, {:array, :string})
 
     embeds_one(:event_metadata, EventMetadata)
     embeds_many(:markets, Market)

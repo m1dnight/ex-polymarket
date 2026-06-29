@@ -21,6 +21,7 @@ defmodule Polymarket.Schemas.Market do
   alias Polymarket.JsonUtil
   alias Polymarket.JsonUtil.JsonFloatArray
   alias Polymarket.JsonUtil.JsonStringArray
+  alias Polymarket.Schemas.ClobReward
   alias Polymarket.Schemas.FeeSchedule
   alias Polymarket.Schemas.Market
   alias Polymarket.Schemas.MarketMetadata
@@ -198,6 +199,7 @@ defmodule Polymarket.Schemas.Market do
     field(:uma_reward, :string)
     field(:uma_resolution_status, :string)
     field(:neg_risk_request_id, :string)
+    field(:neg_risk_market_id, :string)
 
     # Array fields. `outcomes`/`outcome_prices`/`clob_token_ids`/
     # `uma_resolution_statuses` arrive as JSON-encoded strings; `position_ids`
@@ -212,6 +214,7 @@ defmodule Polymarket.Schemas.Market do
     embeds_one(:fee_schedule, FeeSchedule)
     embeds_one(:market_metadata, MarketMetadata)
     embeds_many(:tags, Tag)
+    embeds_many(:clob_rewards, ClobReward)
   end
 
   @doc false
@@ -225,6 +228,7 @@ defmodule Polymarket.Schemas.Market do
     |> cast_embed(:fee_schedule)
     |> cast_embed(:market_metadata)
     |> cast_embed(:tags)
+    |> cast_embed(:clob_rewards)
   end
 
   @doc """

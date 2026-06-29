@@ -7,10 +7,22 @@ defmodule Polymarket.Schemas.EventTest do
   alias Polymarket.Schemas.Series
   alias Polymarket.Schemas.Tag
 
-  @fixtures "test/fixtures/gamma/events_keyset.txt"
-            |> File.read!()
-            |> Jason.decode!(keys: :atoms)
-            |> Map.fetch!(:events)
+  # The keyset endpoint (`GET /events/keyset`) wraps its events in an `events`
+  # array; the single-event endpoints (`GET /events/:id`, `/events/slug/:slug`)
+  # return one event per line in a JSONL fixture. Their shapes differ (e.g. only
+  # the single-event payload carries the event-level `negRisk` flag), so the
+  # completeness check folds in both.
+  @keyset_fixtures "test/fixtures/gamma/events_keyset.txt"
+                   |> File.read!()
+                   |> Jason.decode!(keys: :atoms)
+                   |> Map.fetch!(:events)
+
+  @single_fixtures "test/fixtures/gamma/events.txt"
+                   |> File.read!()
+                   |> String.split("\n", trim: true)
+                   |> Enum.map(&Jason.decode!(&1, keys: :atoms))
+
+  @fixtures @keyset_fixtures ++ @single_fixtures
 
   test "every fixture parses into an Event" do
     for fixture <- @fixtures do
@@ -61,9 +73,18 @@ defmodule Polymarket.Schemas.EventTest do
     assert %EventMetadata{} = event.event_metadata
   end
 
+  # Keys we deliberately don't map:
+  #   * `$schema` — a JSON-Schema self-reference URL the single-event endpoint
+  #     tacks onto every object; metadata, not domain data.
+  #   * `event_creators` — a relational object the single-event endpoint returns
+  #     but the keyset endpoint omits; intentionally not modelled (see Event docs).
+  @ignored_keys MapSet.new([:"$schema", :event_creators])
+
   @spec assert_subset(map(), MapSet.t()) :: true
   defp assert_subset(map, schema_keys) do
-    fixture_keys = map |> Map.keys() |> MapSet.new(&String.to_atom/1)
+    fixture_keys =
+      map |> Map.keys() |> MapSet.new(&String.to_atom/1) |> MapSet.difference(@ignored_keys)
+
     assert MapSet.difference(fixture_keys, schema_keys) == MapSet.new()
   end
 end
