@@ -8,6 +8,8 @@ defmodule Polymarket.Gamma do
   alias Polymarket.Schemas.Market
   alias Polymarket.Schemas.Tag
 
+  require Logger
+
   @url "https://gamma-api.polymarket.com"
 
   @typedoc """
@@ -183,10 +185,11 @@ defmodule Polymarket.Gamma do
   def list_events(opts \\ []) do
     with {:ok, %{events: raw} = body} when is_list(raw) <-
            Http.get("#{@url}/events/keyset", opts, __MODULE__),
-         {:ok, events} <- parse_events(raw) do
+         {:ok, events} <- parse_events(raw, ignore_errors: true) do
       {:ok, %{events: events, next_cursor: Map.get(body, :next_cursor)}}
     else
-      _err -> {:error, :list_events_failed}
+      _err ->
+        {:error, :list_events_failed}
     end
   end
 
@@ -240,19 +243,27 @@ defmodule Polymarket.Gamma do
   #                                Helpers                                     #
   # ---------------------------------------------------------------------------#
 
-  # Parse a list of raw event attrs, failing fast if any element is invalid.
-  @spec parse_events([map()]) :: {:ok, [Event.t()]} | {:error, Ecto.Changeset.t()}
-  defp parse_events(raw) do
+  # Parse a list of raw event attrs. By default fails fast on the first invalid
+  # element; with `ignore_errors: true` invalid elements are skipped instead.
+  @spec parse_events([map()], Keyword.t()) :: {:ok, [Event.t()]} | {:error, Ecto.Changeset.t()}
+  defp parse_events(raw, opts) do
+    ignore_errors? = Keyword.get(opts, :ignore_errors, false)
+
     raw
-    |> Enum.reduce_while({:ok, []}, fn attrs, {:ok, acc} ->
-      case Event.from_attrs(attrs) do
-        {:ok, event} -> {:cont, {:ok, [event | acc]}}
-        {:error, _changeset} = error -> {:halt, error}
-      end
-    end)
+    |> Enum.reduce_while({:ok, []}, &reduce_event(&1, &2, ignore_errors?))
     |> case do
       {:ok, events} -> {:ok, Enum.reverse(events)}
       error -> error
+    end
+  end
+
+  @spec reduce_event(map(), {:ok, [Event.t()]}, boolean()) ::
+          {:cont, {:ok, [Event.t()]}} | {:halt, {:error, Ecto.Changeset.t()}}
+  defp reduce_event(attrs, {:ok, acc}, ignore_errors?) do
+    case Event.from_attrs(attrs) do
+      {:ok, event} -> {:cont, {:ok, [event | acc]}}
+      {:error, _changeset} when ignore_errors? -> {:cont, {:ok, acc}}
+      {:error, _changeset} = error -> {:halt, error}
     end
   end
 

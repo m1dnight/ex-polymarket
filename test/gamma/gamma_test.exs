@@ -324,6 +324,51 @@ defmodule Polymarket.GammaTest do
     end
   end
 
+  describe "get_event_tags/1" do
+    test "requests the right URL and parses the tags on a 200 response" do
+      Req.Test.stub(Polymarket.Gamma, fn conn ->
+        assert conn.method == "GET"
+        assert conn.request_path == "/events/#{@event_id}/tags"
+        Req.Test.json(conn, @tags_attrs)
+      end)
+
+      assert {:ok, tags} = Gamma.get_event_tags(@event_id)
+      assert [%Tag{} | _] = tags
+      assert length(tags) == length(@tags_attrs)
+
+      first = hd(tags)
+      expected = hd(@tags_attrs)
+      assert first.id == expected["id"]
+      assert first.slug == expected["slug"]
+      assert %DateTime{} = first.created_at
+    end
+
+    test "accepts an integer id" do
+      Req.Test.stub(Polymarket.Gamma, fn conn ->
+        assert conn.request_path == "/events/#{@event_id}/tags"
+        Req.Test.json(conn, @tags_attrs)
+      end)
+
+      assert {:ok, [%Tag{} | _]} = Gamma.get_event_tags(String.to_integer(@event_id))
+    end
+
+    test "returns an error on a non-200 response" do
+      Req.Test.stub(Polymarket.Gamma, fn conn ->
+        Plug.Conn.send_resp(conn, 404, "Not Found")
+      end)
+
+      assert {:error, :get_event_tags_failed} = Gamma.get_event_tags("does-not-exist")
+    end
+
+    test "returns an error when a tag in the payload is invalid" do
+      Req.Test.stub(Polymarket.Gamma, fn conn ->
+        Req.Test.json(conn, [%{"createdBy" => "not-an-integer"}])
+      end)
+
+      assert {:error, :get_event_tags_failed} = Gamma.get_event_tags(@event_id)
+    end
+  end
+
   describe "list_events/1" do
     test "requests the right URL and parses a page of events on a 200 response" do
       Req.Test.stub(Polymarket.Gamma, fn conn ->
@@ -371,12 +416,15 @@ defmodule Polymarket.GammaTest do
       assert {:error, :list_events_failed} = Gamma.list_events()
     end
 
-    test "returns an error when an event in the payload is invalid" do
+    test "skips events in the payload that fail to parse" do
+      valid = hd(@events_attrs)
+
       Req.Test.stub(Polymarket.Gamma, fn conn ->
-        Req.Test.json(conn, %{"events" => [%{"id" => "1"}]})
+        Req.Test.json(conn, %{"events" => [valid, %{"id" => "nope"}]})
       end)
 
-      assert {:error, :list_events_failed} = Gamma.list_events()
+      assert {:ok, %{events: [%Event{} = event]}} = Gamma.list_events()
+      assert event.id == valid["id"]
     end
   end
 
