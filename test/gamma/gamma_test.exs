@@ -3,6 +3,7 @@ defmodule Polymarket.GammaTest do
 
   alias Polymarket.Gamma
   alias Polymarket.Schemas.Event
+  alias Polymarket.Schemas.EventMetadata
   alias Polymarket.Schemas.FeeSchedule
   alias Polymarket.Schemas.Market
   alias Polymarket.Schemas.Tag
@@ -33,6 +34,17 @@ defmodule Polymarket.GammaTest do
                 |> File.read!()
                 |> Jason.decode!()
                 |> Map.fetch!("events")
+
+  # A single event response (camelCase, string-keyed) for GET /events/:id, taken
+  # from the first line of the JSONL fixture. Kept raw so Req.Test re-encodes it
+  # exactly as the API would.
+  @event_attrs "test/fixtures/gamma/events.txt"
+               |> File.read!()
+               |> String.split("\n", trim: true)
+               |> hd()
+               |> Jason.decode!()
+
+  @event_id @event_attrs["id"]
 
   describe "get_market_by_id/1" do
     test "requests the right URL and parses the market on a 200 response" do
@@ -192,6 +204,68 @@ defmodule Polymarket.GammaTest do
       end)
 
       assert {:error, :get_market_tags_failed} = Gamma.get_market_tags(@market_id)
+    end
+  end
+
+  describe "get_event_by_id/1" do
+    test "requests the right URL and parses the event on a 200 response" do
+      Req.Test.stub(Polymarket.Gamma, fn conn ->
+        assert conn.method == "GET"
+        assert conn.request_path == "/events/#{@event_id}"
+        Req.Test.json(conn, @event_attrs)
+      end)
+
+      assert {:ok, %Event{} = event} = Gamma.get_event_by_id(@event_id)
+      assert event.id == @event_id
+      assert event.slug == @event_attrs["slug"]
+      assert is_float(event.volume)
+      assert %DateTime{} = event.created_at
+      assert [%Market{} | _] = event.markets
+      assert %EventMetadata{} = event.event_metadata
+      assert [%Tag{} | _] = event.tags
+    end
+
+    test "forwards query options like include_chat to the request" do
+      Req.Test.stub(Polymarket.Gamma, fn conn ->
+        assert URI.decode_query(conn.query_string) == %{"include_chat" => "true"}
+        Req.Test.json(conn, @event_attrs)
+      end)
+
+      assert {:ok, %Event{}} = Gamma.get_event_by_id(@event_id, include_chat: true)
+    end
+
+    test "sends no query string when no options are given" do
+      Req.Test.stub(Polymarket.Gamma, fn conn ->
+        assert conn.query_string == ""
+        Req.Test.json(conn, @event_attrs)
+      end)
+
+      assert {:ok, %Event{}} = Gamma.get_event_by_id(@event_id)
+    end
+
+    test "accepts an integer id" do
+      Req.Test.stub(Polymarket.Gamma, fn conn ->
+        assert conn.request_path == "/events/#{@event_id}"
+        Req.Test.json(conn, @event_attrs)
+      end)
+
+      assert {:ok, %Event{}} = Gamma.get_event_by_id(String.to_integer(@event_id))
+    end
+
+    test "returns an error on a non-200 response" do
+      Req.Test.stub(Polymarket.Gamma, fn conn ->
+        Plug.Conn.send_resp(conn, 404, "Not Found")
+      end)
+
+      assert {:error, :get_event_failed} = Gamma.get_event_by_id("does-not-exist")
+    end
+
+    test "returns an error when the payload is not a valid event" do
+      Req.Test.stub(Polymarket.Gamma, fn conn ->
+        Req.Test.json(conn, %{"unexpected" => "shape"})
+      end)
+
+      assert {:error, :get_event_failed} = Gamma.get_event_by_id(@event_id)
     end
   end
 
