@@ -154,6 +154,28 @@ defmodule Polymarket.Gamma do
   end
 
   @doc """
+  Retrieves the tags attached to an event by the event's unique ID using
+  `GET /events/{id}/tags`.
+
+  Returns the list of `Polymarket.Schemas.Tag` structs for the event.
+
+  ## Examples
+
+      Polymarket.Gamma.get_event_tags(2890)
+
+  """
+  @spec get_event_tags(non_neg_integer() | String.t()) ::
+          {:ok, [Tag.t()]} | {:error, :get_event_tags_failed}
+  def get_event_tags(event_id) do
+    with {:ok, raw} when is_list(raw) <- Http.get("#{@url}/events/#{event_id}/tags", [], __MODULE__),
+         {:ok, tags} <- parse_tags(raw) do
+      {:ok, tags}
+    else
+      _err -> {:error, :get_event_tags_failed}
+    end
+  end
+
+  @doc """
   Fetches a single page of events using the keyset (cursor) pagination endpoint
   `GET /events/keyset`.
 
