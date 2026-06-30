@@ -11,6 +11,7 @@ defmodule Polymarket.Schemas.BestBidAskEvent do
 
   @primary_key false
 
+  @derive Jason.Encoder
   typed_embedded_schema do
     field(:market, :string)
     field(:asset_id, :string)

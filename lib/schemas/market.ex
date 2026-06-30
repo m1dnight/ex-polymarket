@@ -29,6 +29,7 @@ defmodule Polymarket.Schemas.Market do
 
   @primary_key false
 
+  @derive Jason.Encoder
   typed_embedded_schema do
     # Identity / description
     field(:id, :string)

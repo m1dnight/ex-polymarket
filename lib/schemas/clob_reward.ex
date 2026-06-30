@@ -12,6 +12,7 @@ defmodule Polymarket.Schemas.ClobReward do
 
   @primary_key false
 
+  @derive Jason.Encoder
   typed_embedded_schema do
     field(:id, :string)
     field(:condition_id, :string)

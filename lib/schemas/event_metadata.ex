@@ -9,6 +9,7 @@ defmodule Polymarket.Schemas.EventMetadata do
 
   @primary_key false
 
+  @derive Jason.Encoder
   typed_embedded_schema do
     field(:context_requires_regen, :boolean)
     field(:context_description, :string)

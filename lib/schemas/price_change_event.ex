@@ -12,6 +12,7 @@ defmodule Polymarket.Schemas.PriceChangeEvent do
 
   @primary_key false
 
+  @derive Jason.Encoder
   typed_embedded_schema do
     field(:market, :string)
     # Unix epoch in milliseconds, delivered as a string (e.g. "1779656681214").

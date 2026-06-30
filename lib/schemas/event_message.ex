@@ -9,6 +9,7 @@ defmodule Polymarket.Schemas.EventMessage do
 
   @primary_key false
 
+  @derive Jason.Encoder
   typed_embedded_schema do
     field(:id, :string)
     field(:description, :string)

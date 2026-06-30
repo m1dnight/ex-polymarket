@@ -11,6 +11,7 @@ defmodule Polymarket.Schemas.ClobError do
 
   use TypedStruct
 
+  @derive Jason.Encoder
   typedstruct do
     field(:status, non_neg_integer(), enforce: true)
     field(:error, String.t(), enforce: true)

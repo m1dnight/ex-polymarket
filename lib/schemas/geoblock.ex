@@ -17,6 +17,7 @@ defmodule Polymarket.Schemas.Geoblock do
 
   @primary_key false
 
+  @derive Jason.Encoder
   typed_embedded_schema do
     field(:blocked, :boolean)
     field(:ip, :string)

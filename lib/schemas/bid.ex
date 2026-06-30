@@ -9,6 +9,7 @@ defmodule Polymarket.Schemas.Bid do
 
   @primary_key false
 
+  @derive Jason.Encoder
   typed_embedded_schema do
     field(:price, :float)
     field(:size, :float)

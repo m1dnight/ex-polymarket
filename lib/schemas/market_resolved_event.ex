@@ -13,6 +13,7 @@ defmodule Polymarket.Schemas.MarketResolvedEvent do
 
   @primary_key false
 
+  @derive Jason.Encoder
   typed_embedded_schema do
     field(:id, :string)
     field(:market, :string)

@@ -9,6 +9,7 @@ defmodule Polymarket.Schemas.SendOrderResponse do
 
   use TypedStruct
 
+  @derive Jason.Encoder
   typedstruct do
     field(:success, boolean(), default: false)
     field(:order_id, String.t() | nil, default: nil)

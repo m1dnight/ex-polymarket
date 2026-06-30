@@ -18,6 +18,7 @@ defmodule Polymarket.Schemas.MarketByToken do
 
   @primary_key false
 
+  @derive Jason.Encoder
   typed_embedded_schema do
     field(:condition_id, :string)
     field(:primary_token_id, :string)

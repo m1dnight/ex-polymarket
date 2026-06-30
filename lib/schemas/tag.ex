@@ -12,6 +12,7 @@ defmodule Polymarket.Schemas.Tag do
 
   @primary_key false
 
+  @derive Jason.Encoder
   typed_embedded_schema do
     field(:id, :string)
     field(:label, :string)

@@ -9,6 +9,7 @@ defmodule Polymarket.Schemas.PriceChange do
 
   @primary_key false
 
+  @derive Jason.Encoder
   typed_embedded_schema do
     field(:asset_id, :string)
     field(:price, :float)

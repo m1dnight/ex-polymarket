@@ -9,6 +9,7 @@ defmodule Polymarket.Schemas.FeeSchedule do
 
   @primary_key false
 
+  @derive Jason.Encoder
   typed_embedded_schema do
     field(:exponent, :float)
     field(:rate, :float)

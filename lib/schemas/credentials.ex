@@ -18,8 +18,10 @@ defmodule Polymarket.Schemas.Credentials do
 
   alias Polymarket.JsonUtil
 
-  # Redact the secret material: inspecting shows only api_key and the (public) address.
+  # Redact the secret material: inspecting (and JSON-encoding) shows only api_key
+  # and the (public) address — never the secret/passphrase.
   @derive {Inspect, only: [:api_key, :address]}
+  @derive {Jason.Encoder, only: [:api_key, :address]}
   typedstruct do
     field(:api_key, String.t(), enforce: true)
     field(:secret, String.t(), enforce: true)

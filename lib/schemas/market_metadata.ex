@@ -11,6 +11,7 @@ defmodule Polymarket.Schemas.MarketMetadata do
 
   @primary_key false
 
+  @derive Jason.Encoder
   typed_embedded_schema do
     field(:optic_odds_fixture_id, :string)
     field(:optic_odds_market_id, :string)
